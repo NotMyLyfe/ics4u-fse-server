@@ -8,6 +8,7 @@ import * as url from 'url';
 import expressRouting from './expressRouting';
 
 const clients = new Clients;
+const games = new Games;
 
 function noop(){}
 function heartbeat(this: any) {
@@ -41,6 +42,17 @@ httpServer.on('upgrade', function(req, socket, head){
 
 httpServer.listen(8080);
 
+function errorCallback(ws : any, errorMessage : string) : void{
+    ws.send(JSON.stringify({
+        "error" : errorMessage
+    }));
+}
+
+function successCallback(ws : any, message : any) : void{
+    message["result"] = "success";
+    ws.send(JSON.stringify(message));
+}
+
 wss.on('connection', (ws : any) => {
     ws.isAlive = true;
 
@@ -50,7 +62,7 @@ wss.on('connection', (ws : any) => {
     ws.send(JSON.stringify({
         guid: clientId
     }));
-    clients.saveClient("testName", clientId, ws);
+    clients.saveClient("No Name", clientId, ws);
 
     ws.on('pong', heartbeat);
     
@@ -58,9 +70,36 @@ wss.on('connection', (ws : any) => {
         console.log('received: %s', message);
         const json = JSON.parse(message);
         switch(json.action){
-            case "create" : {
-                
+            case "name" : {
+                if(json.name == undefined){
+                    errorCallback(ws, "No name specified");
+                    break;
+                }
+                clients.updateClient(ws.clientId, "name", json.name, errorCallback, successCallback);
                 break;
+            }
+            case "create" : {
+                games.createGame(clients.getClient(ws.clientId), errorCallback, successCallback);
+                break;
+            }
+            case "join" : {
+                if(json.gamekey == undefined){
+                    errorCallback(ws, "No game key specified");
+                    break;
+                }
+                games.joinGame(json.gamekey, clients.getClient(ws.clientId), errorCallback, successCallback);
+                break;
+            }
+            case "start" : {
+                games.startCurrentGame(clients.getClient(ws.clientId), errorCallback);
+                break;
+            }
+            case "game" : {
+                games.playGame(clients.getClient(ws.clientId), json, errorCallback, successCallback);
+                break;
+            }
+            default : {
+                errorCallback(ws, "Invalid command");
             }
         }
     });
