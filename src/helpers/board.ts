@@ -18,9 +18,10 @@ enum HEXAGON{
     NUM_OF_RESOURCES = 6
 }
 
-enum MainBoard{
+enum BOARD{
     NUM_OF_ROWS = 5,
-    NUM_OF_ROWS_INCREASING = 3
+    NUM_OF_ROWS_INCREASING = 3,
+    MAX_NUM_OF_HEXAGONS_PER_ROW = 5
 }
 
 const NUM_OF_HEXAGONS_PER_ROW = [3, 4, 5, 4, 3];
@@ -36,11 +37,11 @@ const HARBOUR_LOC = [
     [1, 0, NODE.NORTH_WEST, NODE.SOUTH_WEST],
     [1, 3, NODE.NORTH, NODE.NORTH_EAST],
     [2, 4, NODE.NORTH_EAST, NODE.SOUTH_EAST],
-    [3, 0, NODE.NORTH_WEST, NODE.SOUTH_WEST],
-    [3, 3, NODE.SOUTH, NODE.SOUTH_EAST],
-    [4, 0, NODE.SOUTH, NODE.SOUTH_WEST],
-    [4, 1, NODE.SOUTH, NODE.SOUTH_EAST]
-]
+    [3, 1, NODE.NORTH_WEST, NODE.SOUTH_WEST],
+    [3, 4, NODE.SOUTH, NODE.SOUTH_EAST],
+    [4, 2, NODE.SOUTH, NODE.SOUTH_WEST],
+    [4, 3, NODE.SOUTH, NODE.SOUTH_EAST]
+];
 
 class Node{
     private adjacentNodes : Array<AdjacentNodes>;
@@ -95,10 +96,10 @@ export default class Board{
     constructor(){
         let numOfResources = [1, 4, 4, 4, 3, 3];
         let numOfRollNumber = [1, 2, 2, 2, 2, 0, 2, 2, 2, 2, 1];
-        this.hexagons = new Array(MainBoard.NUM_OF_ROWS);
+        this.hexagons = new Array(BOARD.NUM_OF_ROWS);
 
-        for(let i = 0; i < MainBoard.NUM_OF_ROWS_INCREASING; i++){
-            this.hexagons[i] = new Array(NUM_OF_HEXAGONS_PER_ROW[i]);
+        for(let i = 0; i < BOARD.NUM_OF_ROWS_INCREASING; i++){
+            this.hexagons[i] = new Array(BOARD.MAX_NUM_OF_HEXAGONS_PER_ROW);
             for(let j = 0; j < NUM_OF_HEXAGONS_PER_ROW[i]; j++){
 
                 let resourceNumber = Math.floor(Math.random() * HEXAGON.NUM_OF_RESOURCES);
@@ -148,9 +149,9 @@ export default class Board{
             }
         }
         
-        for(let i = MainBoard.NUM_OF_ROWS_INCREASING; i < MainBoard.NUM_OF_ROWS; i++){
-            this.hexagons[i] = new Array(NUM_OF_HEXAGONS_PER_ROW[i]);
-            for(let j = 0; j < NUM_OF_HEXAGONS_PER_ROW[i]; j++){
+        for(let i = BOARD.NUM_OF_ROWS_INCREASING; i < BOARD.NUM_OF_ROWS; i++){
+            this.hexagons[i] = new Array(BOARD.MAX_NUM_OF_HEXAGONS_PER_ROW);
+            for(let j = 0, index = i - BOARD.NUM_OF_ROWS_INCREASING + 1; j < NUM_OF_HEXAGONS_PER_ROW[i]; j++, index++){
                 let resourceNumber = Math.floor(Math.random() * HEXAGON.NUM_OF_RESOURCES);
                 while(numOfResources[resourceNumber] <= 0){
                     resourceNumber = Math.floor(Math.random() * HEXAGON.NUM_OF_RESOURCES)
@@ -169,19 +170,21 @@ export default class Board{
                     numOfRollNumber[tokenNumber]--;
                     tokenNumber += 2;
                 }
-                this.hexagons[i][j] = new Hexagon(resourceNumber, tokenNumber);
 
-                this.hexagons[i][j].setNode(this.hexagons[i - 1][j].getNode(NODE.SOUTH), NODE.NORTH_WEST);
-                this.hexagons[i][j].setNode(this.hexagons[i - 1][j].getNode(NODE.SOUTH_EAST), NODE.NORTH);
-                this.hexagons[i][j].setNode(this.hexagons[i - 1][j + 1].getNode(NODE.SOUTH), NODE.NORTH_EAST);
-                if(j != 0) this.hexagons[i][j].setNode(this.hexagons[i][j - 1].getNode(NODE.SOUTH_EAST), NODE.SOUTH_WEST);
+                this.hexagons[i][index] = new Hexagon(resourceNumber, tokenNumber);
+
+                this.hexagons[i][index].setNode(this.hexagons[i - 1][index - 1].getNode(NODE.SOUTH), NODE.NORTH_WEST);
+                this.hexagons[i][index].setNode(this.hexagons[i - 1][index - 1].getNode(NODE.SOUTH_EAST), NODE.NORTH);
+                this.hexagons[i][index].setNode(this.hexagons[i - 1][index].getNode(NODE.SOUTH), NODE.NORTH_EAST);
+
+                if(j != 0) this.hexagons[i][index].setNode(this.hexagons[i][index - 1].getNode(NODE.SOUTH_EAST), NODE.SOUTH_WEST);
                 
                 for(let k = 0; k < HEXAGON.NUM_OF_NODES; k++){
-                    if(this.hexagons[i][j].getNode(k) == undefined) this.hexagons[i][j].setNode(new Node, k);
+                    if(this.hexagons[i][index].getNode(k) == undefined) this.hexagons[i][index].setNode(new Node, k);
                 }
                 for(let k = 0; k < HEXAGON.NUM_OF_NODES; k++){
-                    this.hexagons[i][j].getNode(k).setAdjacentNode(this.hexagons[i][j].getNode((k + HEXAGON.NUM_OF_NODES - 1) % HEXAGON.NUM_OF_NODES));
-                    this.hexagons[i][j].getNode(k).setAdjacentNode(this.hexagons[i][j].getNode((k + 1) % HEXAGON.NUM_OF_NODES));
+                    this.hexagons[i][index].getNode(k).setAdjacentNode(this.hexagons[i][index].getNode((k + HEXAGON.NUM_OF_NODES - 1) % HEXAGON.NUM_OF_NODES));
+                    this.hexagons[i][index].getNode(k).setAdjacentNode(this.hexagons[i][index].getNode((k + 1) % HEXAGON.NUM_OF_NODES));
                 }
             }
         }
@@ -196,5 +199,8 @@ export default class Board{
             this.hexagons[element[0]][element[1]].getNode(element[2]).setHarbour(harbourType);
             this.hexagons[element[0]][element[1]].getNode(element[3]).setHarbour(harbourType);
         });
+    }
+    getAllHexagons(){
+        
     }
 }
