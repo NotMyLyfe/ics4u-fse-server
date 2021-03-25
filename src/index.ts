@@ -95,7 +95,7 @@ wss.on('connection', (ws : any) => {
                 break;
             }
             case "game" : {
-                games.playGame(clients.getClient(ws.clientId), json, errorCallback, successCallback);
+                games.updateGame(clients.getClient(ws.clientId), json, errorCallback, successCallback);
                 break;
             }
             default : {
@@ -105,6 +105,7 @@ wss.on('connection', (ws : any) => {
     });
     
     ws.on('close', ()=>{
+        // TODO Remove user and end user's game
         clients.removeClient(ws.clientId);
         console.log('connection closed');
     });

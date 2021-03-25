@@ -1,4 +1,4 @@
-import Board from './board';
+import { Board, Node } from './board';
 import { Client } from './clients';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -10,7 +10,21 @@ enum GameConst{
 interface gamePlayer {
     client : Client,
     resources : Array<number>,
-    victoryPoints : number
+    victoryPoints : number,
+    nodes : Set<Node>,
+    harbour : Array<boolean>
+}
+
+function shuffle(array : Array<any>){
+    var currentIndex = array.length, temp : number, random : number;
+    while(0 != currentIndex){
+        random = Math.floor(Math.random() * currentIndex);
+        currentIndex -= 1;
+        temp = array[currentIndex];
+        array[currentIndex] = array[random];
+        array[random] = temp;
+    }
+    return array;
 }
 
 class Game{
@@ -19,13 +33,31 @@ class Game{
     private gameStarted : boolean;
     private gameKey : string;
     private gameOwner : string;
+    private currentTurn : number;
+    private roundType : number;
+    private justRolled : boolean;
 
-    constructor(gameOwner : string){
+    constructor(gameOwner : string, gameKey : string){
         this.users = new Array();
         this.board = new Board();
         this.gameStarted = false;
-        this.gameKey = uuidv4().slice(-5);
+        this.gameKey = gameKey;
         this.gameOwner = gameOwner;
+        this.currentTurn = 0;
+        this.roundType = 0;
+        this.justRolled = false;
+    }
+    getKey() : string{
+        return this.gameKey;
+    }
+    getUsers() : Array<gamePlayer> {
+        return this.users;
+    }
+    getGameWinner() : number{
+        for(let i = 0; i < this.users.length; i++){
+            if(this.users[i].victoryPoints >= 10) return i;
+        }
+        return -1;
     }
     isGameOwner(userId : string) : boolean {
         return userId === this.gameOwner;
@@ -35,11 +67,15 @@ class Game{
     }
     startGame() : boolean{
         if(this.users.length < GameConst.MIN_PLAYERS) return false;
-        this.users.forEach(element => {
-            element.client.connnection.send(JSON.stringify({
-                "game" : "started"
+        shuffle(this.users);
+        for(let i = 0; i < this.users.length; i++){
+            this.users[i].client.connnection.send(JSON.stringify({
+                "game" : "started",
+                "hexagons" : this.board.getAllHexagons(),
+                "harbours" : this.board.getAllHarbours(),
+                "turn" : i  
             }));
-        });
+        }
         return this.gameStarted = true;
     }
     joinGame(user : Client) : boolean {
@@ -52,16 +88,47 @@ class Game{
         this.users.push({
             client : user,
             resources : [0, 0, 0, 0, 0],
-            victoryPoints : 0
+            victoryPoints : 0,
+            nodes : new Set(),
+            harbour : [false, false, false, false, false, false]
         });
         user.joinedGame = this.gameKey;
         return true;
-    }  
-    getKey() : string{
-        return this.gameKey;
     }
-    getUsers() : Array<gamePlayer> {
-        return this.users;
+    endTurn() : void {
+        if(this.roundType == 0){
+            if(this.currentTurn == this.users.length) this.roundType++;
+            else this.currentTurn++;
+        }
+        else if(this.roundType == 1){
+            if(this.currentTurn == 0) this.roundType++;
+            else this.currentTurn--;
+        }
+        else{
+            this.currentTurn++;
+        }
+        this.users.forEach(element => {
+            element.client.connnection.send(JSON.stringify({
+                "game" : "turn end",
+                "turn" : this.currentTurn,
+                "round" : this.roundType
+            }))
+        });
+    }
+    rollDice(user : Client, errorCallback : (ws : any, message : string) => any, successCallback : (ws : any, additional : any) => any) : void {
+        if(this.roundType != 3){
+            errorCallback(user.connnection, "Not correct round type");
+            return;
+        }
+        if(this.users[this.currentTurn].client != user){
+            errorCallback(user.connnection, "Not your turn");
+            return;
+        }
+        if(this.justRolled){
+            errorCallback(user.connnection, "Already rolled dice this turn");
+            return;
+        }
+
     }
 }
 
@@ -75,11 +142,13 @@ export default class Games{
             errorCallback(user.connnection, "User already in a game");
             return;
         }
-        let game = new Game(user.guid);
+        let gameKey = uuidv4().slice(-5);
+        while(this.games.has(gameKey)) gameKey = uuidv4().slice(-5);
+        let game = new Game(user.guid, gameKey);
         game.joinGame(user);
-        this.games.set(game.getKey(), game);
+        this.games.set(gameKey, game);
         successCallback(user.connnection, {
-            "gamekey" : game.getKey()
+            "gamekey" : gameKey
         })
     }
     joinGame(gameKey : string, user : Client, errorCallback : (ws : any, message : string) => any, successCallback : (ws : any, additional : any) => any) : void{
@@ -128,7 +197,7 @@ export default class Games{
             }
         }
     }
-    playGame(user : Client, json : any, errorCallback : (ws : any, message : string) => any, successCallback : (ws : any, additional : any) => any) : void{
+    updateGame(user : Client, json : any, errorCallback : (ws : any, message : string) => any, successCallback : (ws : any, additional : any) => any) : void{
         let game = this.getJoinedGame(user, errorCallback);
         if(game == undefined) return;
         if(game.isGameStarted){
