@@ -22,7 +22,8 @@ enum BOARD{
     NUM_OF_ROWS = 5,
     NUM_OF_ROWS_INCREASING = 3,
     MAX_NUM_OF_HEXAGONS_PER_ROW = 5,
-    NUM_OF_HARBOURS = 9
+    NUM_OF_HARBOURS = 9,
+    MAX_DICE = 12
 }
 
 const NUM_OF_HEXAGONS_PER_ROW = [3, 4, 5, 4, 3];
@@ -73,6 +74,15 @@ export class Node{
     getHarbour() : number {
         return this.harbourType;
     }
+    getUser() : number{
+        return this.user;
+    }
+    getType() : number {
+        return this.type;
+    }
+    getAdjacentHexagons() : Array<Hexagon> {
+        return this.adjacentHex;
+    }
 }
 
 class Hexagon{
@@ -93,6 +103,9 @@ class Hexagon{
     getNode(position : number) : Node{
         return this.nodes[position];
     }
+    getAllNodes() : Array<Node> {
+        return this.nodes;
+    }
     getResource() : number{
         return this.resource;
     }
@@ -102,11 +115,16 @@ class Hexagon{
     getValues() : Array<number> {
         return [this.resource, this.tokenNumber];
     }
+    robber() : boolean{
+        return this.hasRobber;
+    }
 }
 
 export class Board{
     private hexagons : Array<Array<Hexagon>>;
+    private rollHexagon : Array<Array<Hexagon>>;
     constructor(){
+        this.rollHexagon = new Array(BOARD.MAX_DICE + 1);
         let numOfResources = [1, 4, 4, 4, 3, 3];
         let numOfRollNumber = [1, 2, 2, 2, 2, 0, 2, 2, 2, 2, 1];
         this.hexagons = new Array(BOARD.NUM_OF_ROWS);
@@ -133,7 +151,9 @@ export class Board{
                     numOfRollNumber[tokenNumber]--;
                     tokenNumber += 2;
                 }
+
                 this.hexagons[i][j] = new Hexagon(resourceNumber, tokenNumber);
+                this.rollHexagon[tokenNumber].push(this.hexagons[i][j]);
 
                 if(i != 0){
                     if(j != 0){
@@ -185,6 +205,7 @@ export class Board{
                 }
 
                 this.hexagons[i][index] = new Hexagon(resourceNumber, tokenNumber);
+                this.rollHexagon[tokenNumber].push(this.hexagons[i][j]);
 
                 this.hexagons[i][index].setNode(this.hexagons[i - 1][index - 1].getNode(NODE.SOUTH), NODE.NORTH_WEST);
                 this.hexagons[i][index].setNode(this.hexagons[i - 1][index - 1].getNode(NODE.SOUTH_EAST), NODE.NORTH);
@@ -229,5 +250,8 @@ export class Board{
             returnArray.push(this.hexagons[element[0]][element[1]].getNode(element[2]).getHarbour);
         });
         return returnArray;
+    }
+    getHexagonsByRoll(roll : number) : Array<Hexagon>{
+        return this.rollHexagon[roll];
     }
 }
