@@ -12,7 +12,8 @@ interface gamePlayer {
     resources : Array<number>,
     victoryPoints : number,
     nodes : Set<Node>,
-    harbour : Array<boolean>
+    harbour : Array<boolean>,
+    cards : Array<number>
 }
 
 function shuffle(array : Array<any>){
@@ -36,6 +37,8 @@ class Game{
     private currentTurn : number;
     private roundType : number;
     private justRolled : boolean;
+    private moveRobber : boolean;
+    private cardPlayed : boolean;
 
     constructor(gameOwner : string, gameKey : string){
         this.users = new Array();
@@ -46,6 +49,8 @@ class Game{
         this.currentTurn = 0;
         this.roundType = 0;
         this.justRolled = false;
+        this.moveRobber = false;
+        this.cardPlayed = false;
     }
     getKey() : string{
         return this.gameKey;
@@ -64,6 +69,9 @@ class Game{
     }
     isGameStarted() : boolean {
         return this.gameStarted;
+    }
+    isUserTurn(user : Client) : boolean {
+        return this.users[this.currentTurn].client == user;
     }
     startGame() : boolean{
         if(this.users.length < GameConst.MIN_PLAYERS) return false;
@@ -90,11 +98,13 @@ class Game{
             resources : [0, 0, 0, 0, 0],
             victoryPoints : 0,
             nodes : new Set(),
-            harbour : [false, false, false, false, false, false]
+            harbour : [false, false, false, false, false, false],
+            cards : [0, 0, 0, 0]
         });
         user.joinedGame = this.gameKey;
         return true;
     }
+    
     endTurn() : void {
         if(this.roundType == 0){
             if(this.currentTurn == this.users.length) this.roundType++;
@@ -115,12 +125,24 @@ class Game{
             }))
         });
     }
-    rollDice(user : Client, errorCallback : (ws : any, message : string) => any, successCallback : (ws : any, additional : any) => any) : void {
+
+
+    rollResources(roll : number) : void{
+        this.board.getHexagonsByRoll(roll).forEach(hexagon => {
+            if(hexagon.robber()) return;
+            hexagon.getAllNodes().forEach(node => {
+                if(node.getUser() == -1) return;
+                this.users[node.getUser()].resources[hexagon.getResource()] += node.getType();
+            });
+        });
+    }
+
+    rollDice(user : Client, errorCallback : (ws : any, message : string) => any) : void {
         if(this.roundType != 3){
             errorCallback(user.connnection, "Not correct round type");
             return;
         }
-        if(this.users[this.currentTurn].client != user){
+        if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
             return;
         }
@@ -129,6 +151,20 @@ class Game{
             return;
         }
 
+        const dice = Math.floor(Math.random() * 6 + 1) + Math.floor(Math.random() * 6 + 1);
+        if(dice == 7){
+            this.moveRobber = true;
+        }
+        else{
+            this.rollResources(dice);
+        }
+        this.justRolled = true;
+        this.users.forEach(element => {
+            element.client.connnection.send(JSON.stringify({
+                "game" : "roll",
+                "dice" : dice
+            }));
+        })
     }
 }
 
