@@ -21,7 +21,8 @@ enum HEXAGON{
 enum BOARD{
     NUM_OF_ROWS = 5,
     NUM_OF_ROWS_INCREASING = 3,
-    MAX_NUM_OF_HEXAGONS_PER_ROW = 5
+    MAX_NUM_OF_HEXAGONS_PER_ROW = 5,
+    NUM_OF_HARBOURS = 9
 }
 
 const NUM_OF_HEXAGONS_PER_ROW = [3, 4, 5, 4, 3];
@@ -43,7 +44,7 @@ const HARBOUR_LOC = [
     [4, 3, NODE.SOUTH, NODE.SOUTH_EAST]
 ];
 
-class Node{
+export class Node{
     private adjacentNodes : Array<AdjacentNodes>;
     private adjacentHex : Array<Hexagon>;
     private user : number;
@@ -69,6 +70,9 @@ class Node{
     setHarbour(harbourType : number){
         this.harbourType = harbourType;
     }
+    getHarbour() : number {
+        return this.harbourType;
+    }
 }
 
 class Hexagon{
@@ -89,9 +93,18 @@ class Hexagon{
     getNode(position : number) : Node{
         return this.nodes[position];
     }
+    getResource() : number{
+        return this.resource;
+    }
+    getToken() : number{
+        return this.tokenNumber;
+    }
+    getValues() : Array<number> {
+        return [this.resource, this.tokenNumber];
+    }
 }
 
-export default class Board{
+export class Board{
     private hexagons : Array<Array<Hexagon>>;
     constructor(){
         let numOfResources = [1, 4, 4, 4, 3, 3];
@@ -200,7 +213,21 @@ export default class Board{
             this.hexagons[element[0]][element[1]].getNode(element[3]).setHarbour(harbourType);
         });
     }
-    getAllHexagons(){
-        
+    getAllHexagons() : Array<Array<Array<number>>>{
+        let returnArray = new Array(BOARD.NUM_OF_ROWS);
+        for(let i = 0; i < BOARD.NUM_OF_ROWS; i++){
+            returnArray[i] = new Array(BOARD.MAX_NUM_OF_HEXAGONS_PER_ROW);
+            for(let j = 0; j < BOARD.MAX_NUM_OF_HEXAGONS_PER_ROW; j++){
+                returnArray[i][j] = (this.hexagons[i][j] == undefined) ? [-1, -1] : this.hexagons[i][j].getValues();
+            }
+        }
+        return returnArray;
+    }
+    getAllHarbours() : Array<number> {
+        let returnArray = new Array();
+        HARBOUR_LOC.forEach(element => {
+            returnArray.push(this.hexagons[element[0]][element[1]].getNode(element[2]).getHarbour);
+        });
+        return returnArray;
     }
 }
