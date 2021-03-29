@@ -54,7 +54,7 @@ class Game{
     private moveRobber : boolean;
     private validRobberies : Set<number>;
     
-    private currentTrade : Array<number>;
+    private currentTrade : Array<Array<number>>;
     private tradeUser : Array<number>;
 
     private cardPlayed : boolean;
@@ -92,6 +92,7 @@ class Game{
         this.numOfResources = [0, 0, 0, 0];
         
         this.currentTrade = undefined;
+        this.tradeUser = undefined;
         
         this.currentLargestArmy = -1;
         this.currentLongestRoad = -1;
@@ -204,6 +205,9 @@ class Game{
         
         this.cantPlayCard = undefined;
         this.cardPlayed = false;
+
+        this.currentTrade = undefined;
+        this.tradeUser = undefined;
 
         this.broadcastToUsers({
             "game" : "turn end",
@@ -515,7 +519,7 @@ class Game{
             errorCallback(user.connnection, "Not your turn");
             return false;
         }
-        
+
         if(this.users[this.currentTurn].pieces[0] == 0){
             errorCallback(user.connnection, "Not enough pieces");
             return false;
@@ -552,6 +556,40 @@ class Game{
         return true;
     }
 
+    startingPlacement(user : Client, settlement : Array<number>, road : Array<number> ,errorCallback : (ws : any, message : string) => any){
+        if(!this.isUserTurn(user)){
+            errorCallback(user.connnection, "Not your turn");
+            return;
+        }
+        if(this.roundType == 2){
+            errorCallback(user.connnection, "Not early game");
+            return;
+        }
+        if(!this.board.validSettlement(settlement) || !this.board.collisionRoad([settlement, road])){
+            errorCallback(user.connnection, "Position is invalid");
+            return;
+        }
+
+        this.board.addSettlement(settlement, this.currentTurn);
+        this.board.addRoad([settlement, road], this.currentTurn);
+        this.users[this.currentTurn].nodes.add(this.board.getHexagon(settlement[0], settlement[1]).getNode(settlement[2]));
+        this.users[this.currentTurn].nodes.add(this.board.getHexagon(road[0], road[1]).getNode(road[2]));
+        
+        if(this.roundType == 1){
+            this.board.getHexagon(settlement[0], settlement[1]).getNode(settlement[2]).getAdjacentHexagons().forEach(hexagon => {
+                if(hexagon.getResource() == 0) return;
+                this.users[this.currentTurn].resources[hexagon.getResource() - 1]++;
+            });
+        }
+
+        this.broadcastGameInfo({
+            "game" : "early game placement",
+            "user" : this.currentTurn,
+            "settlement" : settlement,
+            "road" : road
+        })
+    }
+
     getCard(user : Client, errorCallback : (ws : any, message : string) => any) : boolean{
         if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
@@ -574,7 +612,7 @@ class Game{
         }
 
         if(this.users[this.currentTurn].cards[randomCard] == 0){
-            if(this.cantPlayCard == undefined) this.cantPlayCard = new Array(5);
+            if(this.cantPlayCard == undefined) this.cantPlayCard = new Array(5).fill(false);
             this.cantPlayCard[randomCard] = true;
         }
 
@@ -765,8 +803,127 @@ class Game{
             "card" : cardNumber
         });
     }
-    
 
+    marketTrade(user : Client, resources : Array<Array<number>>, errorCallback : (ws : any, message : string) => any) : void{
+        if(!this.isUserTurn(user)){
+            errorCallback(user.connnection, "Not your turn");
+            return;
+        }
+        let defaultTrade = (this.users[this.currentTurn].harbour[0]) ? 3 : 4;
+        let numResourcesTrading = resources[1].reduce((a, b) => a+b);
+        let tradingAmount = 0;
+        for(let i = 0; i < 5; i++){
+            if(this.users[this.currentTurn].resources[i] < resources[0][i]){
+                errorCallback(user.connnection, "Not enough resources");
+                return;
+            }
+            if(resources[0][i] % ((this.users[this.currentTurn].harbour[i + 1]) ? 2 : defaultTrade) != 0){
+                errorCallback(user.connnection, "Invalid number of resources");
+                return;
+            }
+            tradingAmount += resources[0][i] / ((this.users[this.currentTurn].harbour[i + 1]) ? 2 : defaultTrade);
+        }
+
+        if(tradingAmount != numResourcesTrading){
+            errorCallback(user.connnection, "Invalid number of resources");
+            return;
+        }
+
+        for(let i = 0; i < 5; i++){
+            this.users[this.currentTurn].resources[i] -= resources[0][i];
+            this.users[this.currentTurn].resources[i] += resources[1][i];
+        }
+
+        this.broadcastGameInfo({
+            "game" : "market trade"
+        });
+    }
+
+    userTrade(user : Client, resources : Array<Array<number>>, errorCallback : (ws : any, message : string) => any) : void {
+        if(!this.isUserTurn(user)){
+            errorCallback(user.connnection, "Not your turn");
+            return;
+        }
+        for(let i = 0; i < 5; i++){
+            if(this.users[this.currentTurn].resources[i] < resources[0][i]){
+                errorCallback(user.connnection, "Not enough resources");
+                return;
+            }
+        }
+        this.currentTrade = [[...resources[0]], [...resources[1]]];
+        this.tradeUser = new Array(this.users.length).fill(0);
+        this.tradeUser[this.currentTurn] = -1;
+        this.broadcastGameInfo({
+            "game" : "trade request",
+            "trade" : resources
+        });
+    }
+
+    otherUserTrade(user : Client, accept : boolean, errorCallback : (ws : any, message : string) => any) : void{
+        if(this.isUserTurn(user)){
+            errorCallback(user.connnection, "Cant respond to own trade request");
+            return;
+        }
+        if(this.currentTrade == undefined){
+            errorCallback(user.connnection, "No trades going on");
+            return;
+        }
+
+        let userNum = -1;
+        for(let i = 0; i < this.users.length; i++){
+            if(this.users[i].client == user) userNum = i;
+        }
+
+        if(this.tradeUser[userNum] != 0){
+            errorCallback(user.connnection, "Already confirmed trade");
+            return;
+        }
+
+        if(!accept){
+            this.tradeUser[userNum] = 2;
+        }
+        else{
+            for(let i = 0; i < 5; i++){
+                if(this.users[userNum].resources[i] < this.currentTrade[1][i]){
+                    errorCallback(user.connnection, "Not enough resources");
+                    return;
+                }
+            }
+            this.tradeUser[userNum] = 1;
+        }
+        this.broadcastGameInfo({
+            "game" : "trade status",
+            "users" : this.tradeUser,
+            "responded" : this.tradeUser.every(a => a != 0),
+            "failed" : this.tradeUser.every(a => a != 0 && a != 1)
+        });
+    }
+
+    acceptTrade(user : Client, otherUser : number, errorCallback : (ws : any, message : string) => any) : void{
+        if(!this.isUserTurn(user)){
+            errorCallback(user.connnection, "Not your turn");
+            return;
+        }
+        if(!this.tradeUser.some(a => a == 1)){
+            errorCallback(user.connnection, "No trades available");
+            return;
+        }
+        if(this.tradeUser[otherUser] != 1){
+            errorCallback(user.connnection, "Invalid user selected");
+            return;
+        }
+        for(let i = 0; i < 5; i++){
+            this.users[this.currentTurn].resources[i] -= this.currentTrade[0][i];
+            this.users[this.currentTurn].resources[i] += this.currentTrade[1][i];
+            this.users[otherUser].resources[i] -= this.currentTrade[1][i];
+            this.users[otherUser].resources[i] += this.currentTrade[0][i];
+        }
+        this.currentTrade = undefined;
+        this.tradeUser = undefined;
+        this.broadcastGameInfo({
+            "game" : "trade completed"
+        });
+    }
 }
 
 export default class Games{
