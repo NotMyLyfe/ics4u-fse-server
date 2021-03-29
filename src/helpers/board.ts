@@ -295,19 +295,19 @@ export class Board{
     collisionRoad(position : Array<Array<number>>) : boolean{
         let hexagons = [this.getHexagon(position[0][0], position[0][1]), this.getHexagon(position[1][0], position[1][1])];
         if(hexagons[0] == undefined || hexagons[1] == undefined){
-            return false;
+            return true;
         }
         let node = [hexagons[0].getNode(position[0][2]), hexagons[1].getNode(position[1][2])];
         if(!node[0].getAdjacentNodes().has(node[1]) || node[0].getAdjacentNodes().get(node[1]) != -1){
-            return false;
+            return true;
         }
-
+        return false;
     }
     validRoad(userNodes : Set<Node>, position : Array<Array<number>>) : boolean {
         if(this.collisionRoad(position)) return false;
         let hexagons = [this.getHexagon(position[0][0], position[0][1]), this.getHexagon(position[1][0], position[1][1])];
         let node = [hexagons[0].getNode(position[0][2]), hexagons[1].getNode(position[1][2])];
-        if(userNodes.has(node[0]) && !userNodes.has(node[1])){
+        if(!userNodes.has(node[0]) && !userNodes.has(node[1])){
             return false;
         }
         return true;

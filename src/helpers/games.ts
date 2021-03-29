@@ -118,7 +118,7 @@ class Game{
         return false;
     }
     checkForWinner() : void {
-        for(let i = 0; i < 4; i++){
+        for(let i = 0; i < this.users.length; i++){
             if(this.winner(i)) return;
         }
     }
@@ -284,7 +284,7 @@ class Game{
     }
 
     robberForfeit() : void{
-        for(let i = 0; i < 4; i++){
+        for(let i = 0; i < this.users.length; i++){
             if(this.numOfResources[i] >= 8){
                 this.numForfeit[i] = this.numOfResources[i] / 2;
                 this.users[i].client.connnection(JSON.stringify({
@@ -299,7 +299,7 @@ class Game{
     }
 
     forfeit(user : Client, resources : Array<number>, errorCallback : (ws : any, message : string) => any) : void {
-        for(let i = 0; i < 4; i++){
+        for(let i = 0; i < this.users.length; i++){
             if(this.users[i].client == user){
                 if(resources.reduce((a, b) => a + b) != this.numForfeit[i]){
                     errorCallback(user.connnection, "Invalid amount of resources");
@@ -328,7 +328,7 @@ class Game{
         let user = -1
         let longest = 0;
         let numberOfUsers = 0;
-        for(let i = 0; i < 4; i++){
+        for(let i = 0; i < this.users.length; i++){
             if(this.longestRoads[i] >= 5){
                 if(user == -1) user = i;
                 else if(longest < this.longestRoads[i]){
@@ -510,7 +510,7 @@ class Game{
         return true;
     }
 
-    addRoad(user : Client, position : Array<Array<number>>, errorCallback : (ws : any, message : string) => any, useCard : boolean = false) : boolean{
+    addRoad(user : Client, position : Array<Array<number>>, errorCallback : (ws : any, message : string) => any) : boolean{
         if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
             return false;
@@ -521,14 +521,12 @@ class Game{
             return false;
         }
 
-        if(!useCard){
-            let resources = this.users[this.currentTurn].resources;
-            if(resources[1] == 0 || resources[4] == 0){
-                errorCallback(user.connnection, "Not enough resources");
-                return false;
-            }
-            resources[1]--, resources[4]--;
+        let resources = this.users[this.currentTurn].resources;
+        if(resources[1] == 0 || resources[4] == 0){
+            errorCallback(user.connnection, "Not enough resources");
+            return false;
         }
+        resources[1]--, resources[4]--;
 
         if(this.board.validRoad(this.users[this.currentTurn].nodes, position)){
             errorCallback(user.connnection, "Position is invalid");
@@ -538,15 +536,13 @@ class Game{
         let hexagons = [this.board.getHexagon(position[0][0], position[0][1]), this.board.getHexagon(position[1][0], position[1][1])];
         let node = [hexagons[0].getNode(position[0][2]), hexagons[1].getNode(position[1][2])];
 
-        node[0].getAdjacentNodes().set(node[1], this.currentTurn);
-        node[1].getAdjacentNodes().set(node[0], this.currentTurn);
+        this.users[this.currentTurn].nodes.add(node[0]);
+        this.users[this.currentTurn].nodes.add(node[1]);
         this.users[this.currentTurn].pieces[0]--;
 
         this.board.addRoad(position, this.currentTurn);
 
-        if(this.roundType != 0){
-            this.findLongestPathUser(this.currentTurn);
-        }
+        this.findLongestPathUser(this.currentTurn);
 
         this.broadcastGameInfo({
             "game" : "road",
@@ -602,6 +598,10 @@ class Game{
             errorCallback(user.connnection, "Not your turn");
             return;
         }
+        if(this.cardPlayed){
+            errorCallback(user.connnection, "Already played a card");
+            return;
+        }
         if(this.users[this.currentTurn].cards[cardNumber] == 0){
             errorCallback(user.connnection, "Not enough cards");
             return;
@@ -624,13 +624,148 @@ class Game{
                 break;
             }
             case 2:{
+                if(additionalInformation.monopoly == undefined){
+                    errorCallback(user.connnection, "Invalid data");
+                    return;
+                }
+                let totResources = 0;
+                for(let i = 0; i < this.users.length; i++){
+                    if(i == this.currentTurn) continue;
+                    totResources += this.users[i].resources[additionalInformation.monopoly];
+                    this.numOfResources[i] -= this.users[i].resources[additionalInformation.monopoly];
+                    this.users[i].resources[additionalInformation.monopoly] = 0;
+                }
+                this.users[this.currentTurn].resources[additionalInformation.monopoly] += totResources;
+                this.numOfResources[this.currentTurn] += totResources;
+                break;
+            }
+            case 3:{
+                if(additionalInformation.resources == undefined){
+                    errorCallback(user.connnection, "Invalid data");
+                    return;
+                }
+                this.numOfResources[this.currentTurn] += 2;
+                this.users[this.currentTurn].resources[additionalInformation.resources[0]]++;
+                this.users[this.currentTurn].resources[additionalInformation.resources[1]]++;
+                break;
+            }
+            case 4:{
+                if(additionalInformation.road == undefined){
+                    errorCallback(user.connnection, "Invalid data");
+                    return;
+                }
 
+                if(this.users[this.currentTurn].pieces[0] == 0){
+                    errorCallback(user.connnection, "Not enough pieces");
+                    return;
+                }
+
+                if(this.users[this.currentTurn].pieces[0] == 1){
+                    let position = additionalInformation.road[0];
+                    if(!this.board.validRoad(this.users[this.currentTurn].nodes, position)){
+                        errorCallback(user.connnection, "Position is invalid");
+                        return;
+                    }
+
+                    let hexagons = [this.board.getHexagon(position[0][0], position[0][1]), this.board.getHexagon(position[1][0], position[1][1])];
+                    let node = [hexagons[0].getNode(position[0][2]), hexagons[1].getNode(position[1][2])];
+
+                    this.users[this.currentTurn].nodes.add(node[0]);
+                    this.users[this.currentTurn].nodes.add(node[1]);
+                    this.users[this.currentTurn].pieces[0]--;
+
+                    this.board.addRoad(position, this.currentTurn);
+
+                    this.findLongestPathUser(this.currentTurn);
+
+                    this.broadcastGameInfo({
+                        "game" : "road",
+                        "user" : this.currentTurn,
+                        "position" : position
+                    });
+                }
+                else{
+                    let positions = additionalInformation.road;
+                    if(this.board.validRoad(this.users[this.currentTurn].nodes, positions[0]) && this.board.validRoad(this.users[this.currentTurn].nodes, positions[1])){
+                        positions.forEach(position => {
+                            let hexagons = [this.board.getHexagon(position[0][0], position[0][1]), this.board.getHexagon(position[1][0], position[1][1])];
+                            let node = [hexagons[0].getNode(position[0][2]), hexagons[1].getNode(position[1][2])];
+
+                            this.users[this.currentTurn].nodes.add(node[0]);
+                            this.users[this.currentTurn].nodes.add(node[1]);
+                            this.users[this.currentTurn].pieces[0]--;
+
+                            this.board.addRoad(position, this.currentTurn);
+
+                            this.broadcastGameInfo({
+                                "game" : "road",
+                                "user" : this.currentTurn,
+                                "position" : position
+                            });
+                        });
+                        this.findLongestPathUser(this.currentTurn);
+                    }
+                    else {
+                        if(this.board.collisionRoad(positions[0]) || this.board.collisionRoad(positions[1])){
+                            errorCallback(user.connnection, "Position is invalid");
+                            return;
+                        }
+                        if(this.board.validRoad(this.users[this.currentTurn].nodes, positions[0]) || this.board.validRoad(this.users[this.currentTurn].nodes, positions[1])){
+                            let sharesCommon = false;
+                            for(let i = 0; i < 2; i++){
+                                for(let j = 0; j < 2; j++){
+                                    if(this.board.getHexagon(positions[0][i][0], positions[0][i][1]).getNode(positions[0][i][2]) == this.board.getHexagon(positions[0][j][0], positions[0][j][1]).getNode(positions[0][j][2])){
+                                        sharesCommon = true;
+                                        break;
+                                    }
+                                }
+                                if(sharesCommon) break;
+                            }
+                            if(!sharesCommon){
+                                errorCallback(user.connnection, "Position is invalid");
+                                return;
+                            }
+                            positions.forEach(position => {
+                                let hexagons = [this.board.getHexagon(position[0][0], position[0][1]), this.board.getHexagon(position[1][0], position[1][1])];
+                                let node = [hexagons[0].getNode(position[0][2]), hexagons[1].getNode(position[1][2])];
+    
+                                this.users[this.currentTurn].nodes.add(node[0]);
+                                this.users[this.currentTurn].nodes.add(node[1]);
+                                this.users[this.currentTurn].pieces[0]--;
+    
+                                this.board.addRoad(position, this.currentTurn);
+    
+                                this.broadcastGameInfo({
+                                    "game" : "road",
+                                    "user" : this.currentTurn,
+                                    "position" : position
+                                });
+                            });
+                            this.findLongestPathUser(this.currentTurn);
+                        }
+                        else{
+                            errorCallback(user.connnection, "Position is invalid");
+                            return;
+                        }
+                    }
+                }
+                break;
+            }
+            default : {
+                errorCallback(user.connnection, "Invalid card number");
+                return;
             }
         }
 
         this.cantPlayCard = undefined;
+        this.cardPlayed = true;
 
+        this.broadcastGameInfo({
+            "game" : "card played",
+            "card" : cardNumber
+        });
     }
+    
 
 }
 
