@@ -129,7 +129,7 @@ export class Board{
     private rollHexagon : Array<Array<Hexagon>>;
     private robberPosition : Array<number>;
     constructor(){
-        this.rollHexagon = new Array(BOARD.MAX_DICE + 1);
+        this.rollHexagon = new Array(BOARD.MAX_DICE + 1).fill(new Array());
         let numOfResources = [1, 4, 4, 4, 3, 3];
         let numOfRollNumber = [1, 2, 2, 2, 2, 0, 2, 2, 2, 2, 1];
         this.hexagons = new Array(BOARD.NUM_OF_ROWS);
@@ -254,7 +254,7 @@ export class Board{
     getAllHarbours() : Array<number> {
         let returnArray = new Array();
         HARBOUR_LOC.forEach(element => {
-            returnArray.push(this.hexagons[element[0]][element[1]].getNode(element[2]).getHarbour);
+            returnArray.push(this.hexagons[element[0]][element[1]].getNode(element[2]).getHarbour());
         });
         return returnArray;
     }

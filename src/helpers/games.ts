@@ -208,8 +208,6 @@ class Game{
         else{
             this.currentTurn++;
         }
-
-        if(this.users[this.currentTurn]) return;
         
         this.cantPlayCard = undefined;
         this.cardPlayed = false;
@@ -219,7 +217,7 @@ class Game{
         this.currentTrade = undefined;
         this.tradeUser = undefined;
 
-        this.broadcastToUsers({
+        this.broadcastGameInfo({
             "game" : "turn end",
             "turn" : this.currentTurn,
             "round" : this.roundType
@@ -590,7 +588,7 @@ class Game{
             errorCallback(user.connnection, "Not early game");
             return;
         }
-        if(!this.board.validSettlement(settlement) || !this.board.collisionRoad([settlement, road])){
+        if(!this.board.validSettlement(settlement) || this.board.collisionRoad([settlement, road])){
             errorCallback(user.connnection, "Position is invalid");
             return;
         }
@@ -1079,6 +1077,7 @@ export default class Games{
                     return;
                 }
                 game.startingPlacement(user, json.settlement, json.road, errorCallback);
+                game.endTurn();
                 break;
             }
             case "dice" : {
