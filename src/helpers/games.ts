@@ -29,6 +29,14 @@ function shuffle(array : Array<any>){
     return array;
 }
 
+function isTypeArray(input : any, type : String) : boolean{
+    if(!(input instanceof Array)) return false;
+    for(let i of input){
+        if(typeof i != type) return false;
+    }
+    return true;
+}
+
 class Game{
     private users : Array<gamePlayer>;
     private board : Board;
@@ -206,6 +214,8 @@ class Game{
         this.cantPlayCard = undefined;
         this.cardPlayed = false;
 
+        this.justRolled = false;
+
         this.currentTrade = undefined;
         this.tradeUser = undefined;
 
@@ -217,7 +227,7 @@ class Game{
     }
 
     rob(user : Client, robbedPlayer : number, errorCallback : (ws : any, message : string) => any) : void{
-        if(this.isUserTurn(user)){
+        if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
             return;
         }
@@ -242,7 +252,7 @@ class Game{
     }
 
     robberMove(user : Client, position : Array<number>, errorCallback : (ws : any, message : string) => any, cardPlayed : boolean = false) : boolean{
-        if(this.isUserTurn(user)){
+        if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
             return false;
         }
@@ -255,7 +265,7 @@ class Game{
             this.validRobberies = new Set();
 
             this.board.getHexagon(position[0], position[1]).getAllNodes().forEach(node => {
-                if(node.getUser() != -1 && this.numOfResources[node.getUser()] > 0) this.validRobberies.add(node.getUser());
+                if(node.getUser() != -1 && node.getUser() != this.currentTurn && this.numOfResources[node.getUser()] > 0) this.validRobberies.add(node.getUser());
             });
             
             this.moveRobber = false;
@@ -417,6 +427,11 @@ class Game{
     }
 
     addSettlement(user : Client, position : Array<number>, errorCallback : (ws : any, message : string) => any) : boolean{
+        if(this.roundType != 2 || !this.justRolled){
+            errorCallback(user.connnection, "Not right turn type");
+            return false;
+        }
+        
         if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
             return false;
@@ -469,6 +484,11 @@ class Game{
     }
 
     upgradeSettlement(user : Client, position : Array<number>, errorCallback : (ws : any, message : string) => any) : boolean{
+        if(this.roundType != 2 || !this.justRolled){
+            errorCallback(user.connnection, "Not right turn type");
+            return false;
+        }
+        
         if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
             return false;
@@ -515,6 +535,11 @@ class Game{
     }
 
     addRoad(user : Client, position : Array<Array<number>>, errorCallback : (ws : any, message : string) => any) : boolean{
+        if(this.roundType != 2 || !this.justRolled){
+            errorCallback(user.connnection, "Not right turn type");
+            return false;
+        }
+        
         if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
             return false;
@@ -582,6 +607,9 @@ class Game{
             });
         }
 
+        this.users[this.currentTurn].pieces[0]--;
+        this.users[this.currentTurn].pieces[1]--;
+
         this.broadcastGameInfo({
             "game" : "early game placement",
             "user" : this.currentTurn,
@@ -591,6 +619,11 @@ class Game{
     }
 
     getCard(user : Client, errorCallback : (ws : any, message : string) => any) : boolean{
+        if(this.roundType != 2 || !this.justRolled){
+            errorCallback(user.connnection, "Not right turn type");
+            return false;
+        }
+        
         if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
             return false;
@@ -632,6 +665,11 @@ class Game{
     }
 
     playCard(user : Client, errorCallback : (ws : any, message : string) => any, cardNumber : number, additionalInformation?: { robberPosition? : Array<number>, monopoly? : number, resources? : Array<number>, road? : Array<Array<Array<number>>>}) : void{
+        if(this.roundType != 2){
+            errorCallback(user.connnection, "Not right turn type");
+            return;
+        }
+        
         if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
             return;
@@ -651,19 +689,31 @@ class Game{
 
         switch(cardNumber){
             case 0:{
-                if(additionalInformation.robberPosition == undefined){
-                    errorCallback(user.connnection, "Invalid data");
+                if(!isTypeArray(additionalInformation.robberPosition, "number")){
+                    errorCallback(user.connnection, "Data invalid");
                     return;
                 }
                 if(!this.robberMove(user, additionalInformation.robberPosition, errorCallback)){
                     errorCallback(user.connnection, "Position is invalid");
                     return;
                 }
+                this.knights[this.currentTurn]++;
+                if(this.knights[this.currentTurn] >= 3){
+                    if(this.currentLargestArmy == -1 || this.knights[this.currentLargestArmy] > this.knights[this.currentTurn]) {
+                        if(this.currentLargestArmy != -1){
+                            this.publicVictoryPoints[this.currentLargestArmy] -= 2;
+                            this.users[this.currentLargestArmy].victoryPoints -= 2;
+                        }
+                        this.publicVictoryPoints[this.currentTurn] -= 2;
+                        this.users[this.currentTurn].victoryPoints -= 2;
+                        this.currentLargestArmy = this.currentTurn;
+                    }
+                }
                 break;
             }
             case 2:{
-                if(additionalInformation.monopoly == undefined){
-                    errorCallback(user.connnection, "Invalid data");
+                if(typeof additionalInformation.monopoly != "number"){
+                    errorCallback(user.connnection, "Data invalid");
                     return;
                 }
                 let totResources = 0;
@@ -678,8 +728,8 @@ class Game{
                 break;
             }
             case 3:{
-                if(additionalInformation.resources == undefined){
-                    errorCallback(user.connnection, "Invalid data");
+                if(!isTypeArray(additionalInformation.resources, "number")){
+                    errorCallback(user.connnection, "Data invalid");
                     return;
                 }
                 this.numOfResources[this.currentTurn] += 2;
@@ -805,6 +855,11 @@ class Game{
     }
 
     marketTrade(user : Client, resources : Array<Array<number>>, errorCallback : (ws : any, message : string) => any) : void{
+        if(this.roundType != 2 || !this.justRolled){
+            errorCallback(user.connnection, "Not right turn type");
+            return;
+        }
+        
         if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
             return;
@@ -840,6 +895,11 @@ class Game{
     }
 
     userTrade(user : Client, resources : Array<Array<number>>, errorCallback : (ws : any, message : string) => any) : void {
+        if(this.roundType != 2 || !this.justRolled){
+            errorCallback(user.connnection, "Not right turn type");
+            return;
+        }
+        
         if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
             return;
@@ -860,6 +920,11 @@ class Game{
     }
 
     otherUserTrade(user : Client, accept : boolean, errorCallback : (ws : any, message : string) => any) : void{
+        if(this.roundType != 2 || !this.justRolled){
+            errorCallback(user.connnection, "Not right turn type");
+            return;
+        }
+        
         if(this.isUserTurn(user)){
             errorCallback(user.connnection, "Cant respond to own trade request");
             return;
@@ -900,6 +965,11 @@ class Game{
     }
 
     acceptTrade(user : Client, otherUser : number, errorCallback : (ws : any, message : string) => any) : void{
+        if(this.roundType != 2 || !this.justRolled){
+            errorCallback(user.connnection, "Not right turn type");
+            return;
+        }
+
         if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
             return;
@@ -994,9 +1064,128 @@ export default class Games{
     updateGame(user : Client, json : any, errorCallback : (ws : any, message : string) => any, successCallback : (ws : any, additional : any) => any) : void{
         let game = this.getJoinedGame(user, errorCallback);
         if(game == undefined) return;
-        if(game.isGameStarted){
+        if(!game.isGameStarted()){
             errorCallback(user.connnection, "Game not started");
             return;
         }
+        if(json.game == undefined || (typeof json.game) != "string") {
+            errorCallback(user.connnection, "Data invalid");
+            return;
+        }
+        switch (json.game){
+            case "startSettlement" : {
+                if(!isTypeArray(json.settlement, "number") || !isTypeArray(json.road, "number")){
+                    errorCallback(user.connnection, "Data invalid");
+                    return;
+                }
+                game.startingPlacement(user, json.settlement, json.road, errorCallback);
+                break;
+            }
+            case "dice" : {
+                game.rollDice(user, errorCallback);
+                break;
+            }
+            case "end" : {
+                game.endTurn();
+                break;
+            }
+            case "settlement" : {
+                if(!isTypeArray(json.settlement, "number")){
+                    errorCallback(user.connnection, "Data invalid");
+                    return;
+                }
+                game.addSettlement(user, json.settlement, errorCallback);
+                break;
+            }
+            case "city" : {
+                if(!isTypeArray(json.settlement, "number")){
+                    errorCallback(user.connnection, "Data invalid");
+                    return;
+                }
+                game.upgradeSettlement(user, json.settlement, errorCallback);
+                break;
+            }
+            case "road" : {
+                if(!(json.road instanceof Array) || !isTypeArray(json.road[0], "number") || !isTypeArray(json.road[1], "number")){
+                    errorCallback(user.connnection, "Data invalid");
+                    return;
+                }
+                game.addRoad(user, json.road, errorCallback);
+                break;
+            }
+            case "forfeit" : {
+                if(!isTypeArray(json.resources, "number")){
+                    errorCallback(user.connnection, "Data invalid");
+                    return;
+                }
+                game.forfeit(user, json.resources, errorCallback);
+                break;
+            }
+            case "robber" : {
+                if(!isTypeArray(json.position, "number")){
+                    errorCallback(user.connnection, "Data invalid");
+                    return;
+                }
+                game.robberMove(user, json.position, errorCallback);
+                break;
+            }
+            case "rob" : {
+                if(typeof json.player != "number"){
+                    errorCallback(user.connnection, "Data invalid");
+                    return;
+                }
+                game.rob(user, json.player, errorCallback);
+                break;
+            }
+            case "getCard" : {
+                game.getCard(user, errorCallback);
+                break;
+            }
+            case "playCard" : {
+                if(typeof json.card != "number" || json.additionalInformation != undefined){
+                    errorCallback(user.connnection, "Data invalid");
+                    return;
+                }
+                game.playCard(user, errorCallback, json.card, json.additionalInformation);
+                break;
+            }
+            case "marketTrade" : {
+                if(!isTypeArray(json.resources, "number")){
+                    errorCallback(user.connnection, "Data invalid");
+                    return;
+                }
+                game.marketTrade(user, json.resources, errorCallback);
+                break;
+            }
+            case "userTrade" : {
+                if(!isTypeArray(json.resources, "number")){
+                    errorCallback(user.connnection, "Data invalid");
+                    return;
+                }
+                game.userTrade(user, json.resources, errorCallback);
+                break;
+            }
+            case "otherUserTrade" : {
+                if(typeof json.accept != "boolean"){
+                    errorCallback(user.connnection, "Data invalid");
+                    return;
+                }
+                game.otherUserTrade(user, json.accept, errorCallback);
+                break;
+            }
+            case "acceptTrade" : {
+                if(typeof json.otherUser != "number"){
+                    errorCallback(user.connnection, "Data invalid");
+                    return;
+                }
+                game.acceptTrade(user, json.otherUser, errorCallback);
+                break;
+            }
+            default : {
+                errorCallback(user.connnection, "Command invalid");
+                break;
+            }
+        }
+
     }
 }
