@@ -196,9 +196,13 @@ class Game{
         return true;
     }
     
-    endTurn() : void {
+    endTurn(user : Client, errorCallback : (ws : any, message : string) => any) : void {
+        if(!this.isUserTurn(user)){
+            errorCallback(user.connnection, "Not your turn");
+            return;
+        }
         if(this.roundType == 0){
-            if(this.currentTurn == this.users.length) this.roundType++;
+            if(this.currentTurn == this.users.length - 1) this.roundType++;
             else this.currentTurn++;
         }
         else if(this.roundType == 1){
@@ -206,7 +210,7 @@ class Game{
             else this.currentTurn--;
         }
         else{
-            this.currentTurn++;
+            this.currentTurn = (this.currentTurn + 1) % this.users.length;
         }
         
         this.cantPlayCard = undefined;
@@ -579,18 +583,18 @@ class Game{
         return true;
     }
 
-    startingPlacement(user : Client, settlement : Array<number>, road : Array<number> ,errorCallback : (ws : any, message : string) => any){
+    startingPlacement(user : Client, settlement : Array<number>, road : Array<number> ,errorCallback : (ws : any, message : string) => any) : boolean{
         if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
-            return;
+            return false;
         }
         if(this.roundType == 2){
             errorCallback(user.connnection, "Not early game");
-            return;
+            return false;
         }
         if(!this.board.validSettlement(settlement) || this.board.collisionRoad([settlement, road])){
             errorCallback(user.connnection, "Position is invalid");
-            return;
+            return false;
         }
 
         this.board.addSettlement(settlement, this.currentTurn);
@@ -613,7 +617,8 @@ class Game{
             "user" : this.currentTurn,
             "settlement" : settlement,
             "road" : road
-        })
+        });
+        return true;
     }
 
     getCard(user : Client, errorCallback : (ws : any, message : string) => any) : boolean{
@@ -1076,8 +1081,8 @@ export default class Games{
                     errorCallback(user.connnection, "Data invalid");
                     return;
                 }
-                game.startingPlacement(user, json.settlement, json.road, errorCallback);
-                game.endTurn();
+                if(game.startingPlacement(user, json.settlement, json.road, errorCallback))
+                    game.endTurn(user, errorCallback);
                 break;
             }
             case "dice" : {
@@ -1085,7 +1090,7 @@ export default class Games{
                 break;
             }
             case "end" : {
-                game.endTurn();
+                game.endTurn(user, errorCallback);
                 break;
             }
             case "settlement" : {
