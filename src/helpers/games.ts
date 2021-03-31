@@ -190,7 +190,7 @@ class Game{
             nodes : new Set(),
             harbour : [false, false, false, false, false, false],
             cards : [0, 0, 0, 0, 0],
-            pieces : [0, 0, 0]
+            pieces : [15, 5, 4]
         });
         user.joinedGame = this.gameKey;
         return true;
@@ -267,22 +267,31 @@ class Game{
             this.validRobberies = new Set();
 
             this.board.getHexagon(position[0], position[1]).getAllNodes().forEach(node => {
+                console.log(node.getUser());
+                console.log(this.numOfResources[node.getUser()]);
                 if(node.getUser() != -1 && node.getUser() != this.currentTurn && this.numOfResources[node.getUser()] > 0) this.validRobberies.add(node.getUser());
             });
             
             this.moveRobber = false;
             
-            if(this.validRobberies.size == 0) return;
+            // Debug response
+            console.log(this.validRobberies);
+
+            if(this.validRobberies.size == 0) {
+                this.broadcastGameInfo({"game" : "robbery", "robber" : position});
+                return;
+            }
             else if(this.validRobberies.size == 1){
                 let resource = Math.floor(Math.random() * 5);
-                while(this.users[this.validRobberies[0]].resources[resource] == 0){
+                let val = this.validRobberies.values().next().value;
+                while(this.users[val].resources[resource] == 0){
                     resource = Math.floor(Math.random() * 5);
                 }
-                this.users[this.validRobberies[0]].resources[resource]--;
-                this.numOfResources[this.validRobberies[0]]--;
+                this.users[val].resources[resource]--;
+                this.numOfResources[val]--;
                 this.users[this.currentTurn].resources[resource]++;
                 this.numOfResources[this.currentTurn]++;
-                this.broadcastGameInfo({"game" : "robbery"});
+                this.broadcastGameInfo({"game" : "robbery", "robber" : position});
                 this.validRobberies = new Set();
             }
             else{
@@ -303,7 +312,7 @@ class Game{
         for(let i = 0; i < this.users.length; i++){
             if(this.numOfResources[i] >= 8){
                 this.numForfeit[i] = this.numOfResources[i] / 2;
-                this.users[i].client.connnection(JSON.stringify({
+                this.users[i].client.connnection.send(JSON.stringify({
                     "game" : "forfeit",
                     "numberForfeit" : this.numForfeit[i]
                 }));
@@ -311,6 +320,12 @@ class Game{
             else{
                 this.numForfeit[i] = 0;
             }
+        }
+        if(this.numForfeit.every(num => num == 0)){
+            this.moveRobber = true;
+            this.users[this.currentTurn].client.connnection.send(JSON.stringify({
+                "game" : "move robber"
+            }));
         }
     }
 
@@ -327,6 +342,7 @@ class Game{
                     }
                 }
                 for(let j = 0; j < 5; j++) this.users[i].resources[j] -= resources[j];
+                this.numOfResources[this.currentTurn] -= this.numForfeit[i];
                 this.numForfeit[i] = 0;
                 this.broadcastGameInfo();
                 break;
@@ -457,6 +473,7 @@ class Game{
         }
         
         resources[0]--, resources[1]--, resources[2]--, resources[4]--;
+        this.numOfResources[this.currentTurn] -= 4;
 
         let otherUser = this.board.breaksRoad(this.currentTurn, position);
         
@@ -519,6 +536,10 @@ class Game{
             return false;
         }
 
+        this.users[this.currentTurn].resources[3] -= 3;
+        this.users[this.currentTurn].resources[0] -= 2;
+        this.numOfResources[this.currentTurn] -= 5;
+
         node.setType(2);
         this.users[this.currentTurn].victoryPoints++;
         this.publicVictoryPoints[this.currentTurn]++;
@@ -557,12 +578,14 @@ class Game{
             errorCallback(user.connnection, "Not enough resources");
             return false;
         }
-        resources[1]--, resources[4]--;
 
-        if(this.board.validRoad(this.users[this.currentTurn].nodes, position)){
+        if(!this.board.validRoad(this.users[this.currentTurn].nodes, position)){
             errorCallback(user.connnection, "Position is invalid");
             return false;
         }
+
+        resources[1]--, resources[4]--;
+        this.numOfResources[this.currentTurn] -= 2;
 
         let hexagons = [this.board.getHexagon(position[0][0], position[0][1]), this.board.getHexagon(position[1][0], position[1][1])];
         let node = [hexagons[0].getNode(position[0][2]), hexagons[1].getNode(position[1][2])];
@@ -606,6 +629,7 @@ class Game{
             this.board.getHexagon(settlement[0], settlement[1]).getNode(settlement[2]).getAdjacentHexagons().forEach(hexagon => {
                 if(hexagon.getResource() == 0) return;
                 this.users[this.currentTurn].resources[hexagon.getResource() - 1]++;
+                this.numOfResources[this.currentTurn]++;
             });
         }
 
@@ -640,6 +664,11 @@ class Game{
             errorCallback(user.connnection, "No cards available");
             return false;
         }
+
+        this.users[this.currentTurn].resources[0]--;
+        this.users[this.currentTurn].resources[2]--;
+        this.users[this.currentTurn].resources[3]--;
+        this.numOfResources[this.currentTurn] -= 3;
 
         let randomCard = Math.floor(Math.random() * 5);
         
@@ -774,6 +803,7 @@ class Game{
                         "user" : this.currentTurn,
                         "position" : position
                     });
+                    this.checkForWinner();
                 }
                 else{
                     let positions = additionalInformation.road;
@@ -795,6 +825,7 @@ class Game{
                             });
                         });
                         this.findLongestPathUser(this.currentTurn);
+                        this.checkForWinner();
                     }
                     else {
                         if(this.board.collisionRoad(positions[0]) || this.board.collisionRoad(positions[1])){
@@ -833,6 +864,7 @@ class Game{
                                 });
                             });
                             this.findLongestPathUser(this.currentTurn);
+                            this.checkForWinner();
                         }
                         else{
                             errorCallback(user.connnection, "Position is invalid");
@@ -889,7 +921,9 @@ class Game{
 
         for(let i = 0; i < 5; i++){
             this.users[this.currentTurn].resources[i] -= resources[0][i];
+            this.numOfResources[this.currentTurn] -= resources[0][i];
             this.users[this.currentTurn].resources[i] += resources[1][i];
+            this.numOfResources[this.currentTurn] += resources[1][i];
         }
 
         this.broadcastGameInfo({
@@ -988,8 +1022,10 @@ class Game{
         for(let i = 0; i < 5; i++){
             this.users[this.currentTurn].resources[i] -= this.currentTrade[0][i];
             this.users[this.currentTurn].resources[i] += this.currentTrade[1][i];
+            this.numOfResources[this.currentTurn] -= this.currentTrade[0][i] - this.currentTrade[1][i];
             this.users[otherUser].resources[i] -= this.currentTrade[1][i];
             this.users[otherUser].resources[i] += this.currentTrade[0][i];
+            this.numOfResources[otherUser] -= this.currentTrade[1][i] - this.currentTrade[0][i];
         }
         this.currentTrade = undefined;
         this.tradeUser = undefined;
@@ -1146,7 +1182,7 @@ export default class Games{
                 break;
             }
             case "playCard" : {
-                if(typeof json.card != "number" || json.additionalInformation != undefined){
+                if((typeof json.card) != "number"){
                     errorCallback(user.connnection, "Data invalid");
                     return;
                 }
@@ -1154,7 +1190,7 @@ export default class Games{
                 break;
             }
             case "marketTrade" : {
-                if(!isTypeArray(json.resources, "number")){
+                if(!(json.resources instanceof Array) || !isTypeArray(json.resources[0], "number") || !isTypeArray(json.resources[1], "number")){
                     errorCallback(user.connnection, "Data invalid");
                     return;
                 }
@@ -1162,7 +1198,7 @@ export default class Games{
                 break;
             }
             case "userTrade" : {
-                if(!isTypeArray(json.resources, "number")){
+                if(!(json.resources instanceof Array) || !isTypeArray(json.resources[0], "number") || !isTypeArray(json.resources[1], "number")){
                     errorCallback(user.connnection, "Data invalid");
                     return;
                 }

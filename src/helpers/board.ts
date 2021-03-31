@@ -92,10 +92,11 @@ class Hexagon{
     private resource : number;
     private tokenNumber : number;
 
-    constructor(resource : number, tokenNumber : number){
+    constructor(resource : number, tokenNumber : number, hasRobber : boolean){
         this.nodes = new Array(HEXAGON.NUM_OF_NODES);
         this.resource = resource;
         this.tokenNumber = tokenNumber;
+        this.hasRobber = hasRobber;
     }
     setNode(node : Node, position : number) : void{
         this.nodes[position] = node;
@@ -129,7 +130,8 @@ export class Board{
     private rollHexagon : Array<Array<Hexagon>>;
     private robberPosition : Array<number>;
     constructor(){
-        this.rollHexagon = new Array(BOARD.MAX_DICE + 1).fill(new Array());
+        this.rollHexagon = new Array(BOARD.MAX_DICE + 1);
+        for(let i = 0; i <= BOARD.MAX_DICE; i++) this.rollHexagon[i] = new Array();
         let numOfResources = [1, 4, 4, 4, 3, 3];
         let numOfRollNumber = [1, 2, 2, 2, 2, 0, 2, 2, 2, 2, 1];
         this.hexagons = new Array(BOARD.NUM_OF_ROWS);
@@ -144,7 +146,7 @@ export class Board{
                 } 
                 numOfResources[resourceNumber]--;
 
-                let tokenNumber;
+                let tokenNumber : number;
                 if(resourceNumber == 0){
                     tokenNumber = 0;
                     this.robberPosition = [i, j];
@@ -158,7 +160,7 @@ export class Board{
                     tokenNumber += 2;
                 }
 
-                this.hexagons[i][j] = new Hexagon(resourceNumber, tokenNumber);
+                this.hexagons[i][j] = new Hexagon(resourceNumber, tokenNumber, resourceNumber == 0);
                 this.rollHexagon[tokenNumber].push(this.hexagons[i][j]);
 
                 if(i != 0){
@@ -197,7 +199,7 @@ export class Board{
                 } 
                 numOfResources[resourceNumber]--;
 
-                let tokenNumber;
+                let tokenNumber : number;
                 if(resourceNumber == 0){
                     tokenNumber = 0;
                     this.robberPosition = [i, index];
@@ -211,8 +213,8 @@ export class Board{
                     tokenNumber += 2;
                 }
 
-                this.hexagons[i][index] = new Hexagon(resourceNumber, tokenNumber);
-                this.rollHexagon[tokenNumber].push(this.hexagons[i][j]);
+                this.hexagons[i][index] = new Hexagon(resourceNumber, tokenNumber, resourceNumber == 0);
+                this.rollHexagon[tokenNumber].push(this.hexagons[i][index]);
 
                 this.hexagons[i][index].setNode(this.hexagons[i - 1][index - 1].getNode(NODE.SOUTH), NODE.NORTH_WEST);
                 this.hexagons[i][index].setNode(this.hexagons[i - 1][index - 1].getNode(NODE.SOUTH_EAST), NODE.NORTH);
@@ -298,7 +300,7 @@ export class Board{
             return true;
         }
         let node = [hexagons[0].getNode(position[0][2]), hexagons[1].getNode(position[1][2])];
-        if(!node[0].getAdjacentNodes().has(node[1]) || node[0].getAdjacentNodes().get(node[1]) != -1){
+        if(!node[0].getAdjacentNodes().has(node[1]) || node[0].getAdjacentNodes().get(node[1]) != -1 || node[0] == node[1]){
             return true;
         }
         return false;
@@ -307,10 +309,7 @@ export class Board{
         if(this.collisionRoad(position)) return false;
         let hexagons = [this.getHexagon(position[0][0], position[0][1]), this.getHexagon(position[1][0], position[1][1])];
         let node = [hexagons[0].getNode(position[0][2]), hexagons[1].getNode(position[1][2])];
-        if(!userNodes.has(node[0]) && !userNodes.has(node[1])){
-            return false;
-        }
-        return true;
+        return (userNodes.has(node[0]) || userNodes.has(node[1]));
     }
     addRoad(position : Array<Array<number>>, user : number) : void{
         let hexagons = [this.getHexagon(position[0][0], position[0][1]), this.getHexagon(position[1][0], position[1][1])];
