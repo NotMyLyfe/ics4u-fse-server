@@ -311,7 +311,7 @@ class Game{
     robberForfeit() : void{
         for(let i = 0; i < this.users.length; i++){
             if(this.numOfResources[i] >= 8){
-                this.numForfeit[i] = this.numOfResources[i] / 2;
+                this.numForfeit[i] = Math.floor(this.numOfResources[i] / 2);
                 this.users[i].client.connnection.send(JSON.stringify({
                     "game" : "forfeit",
                     "numberForfeit" : this.numForfeit[i]
@@ -334,6 +334,7 @@ class Game{
             if(this.users[i].client == user){
                 if(resources.reduce((a, b) => a + b) != this.numForfeit[i]){
                     errorCallback(user.connnection, "Invalid amount of resources");
+                    return;
                 }
                 for(let j = 0; j < 5; j++){
                     if(resources[j] > this.users[i].resources[j]){
@@ -350,6 +351,7 @@ class Game{
         }
         if(this.numForfeit.every(num => num == 0)){
             this.moveRobber = true;
+            this.numForfeit = [0, 0, 0, 0];
             this.users[this.currentTurn].client.connnection.send(JSON.stringify({
                 "game" : "move robber"
             }));
@@ -362,8 +364,7 @@ class Game{
         let numberOfUsers = 0;
         for(let i = 0; i < this.users.length; i++){
             if(this.longestRoads[i] >= 5){
-                if(user == -1) user = i;
-                else if(longest < this.longestRoads[i]){
+                if(longest < this.longestRoads[i]){
                     numberOfUsers = 1;
                     user = i;
                     longest = this.longestRoads[i];
@@ -372,6 +373,9 @@ class Game{
                     numberOfUsers++;
                 }
             }
+            console.log(user);
+            console.log(numberOfUsers);
+            console.log(longest);
         }
         if(numberOfUsers == 1){
             if(this.currentLongestRoad != -1){
@@ -382,7 +386,7 @@ class Game{
             this.users[this.currentLongestRoad].victoryPoints += 2;
             this.publicVictoryPoints[this.currentLongestRoad] += 2;
         }
-        if((numberOfUsers > 1 && this.longestRoads[this.currentLongestRoad] < longest) || numberOfUsers == 0){
+        else if((numberOfUsers > 1 && this.longestRoads[this.currentLongestRoad] < longest) || numberOfUsers == 0){
             if(this.currentLongestRoad != -1){
                 this.users[this.currentLongestRoad].victoryPoints-=2;
                 this.publicVictoryPoints[this.currentLongestRoad]-=2;
@@ -999,6 +1003,11 @@ class Game{
             "responded" : this.tradeUser.every(a => a != 0),
             "failed" : this.tradeUser.every(a => a != 0 && a != 1)
         });
+
+        if(this.tradeUser.every(a => a != 0 && a!= 1)){
+            this.tradeUser = undefined;
+            this.currentTrade = undefined;
+        }
     }
 
     acceptTrade(user : Client, otherUser : number, errorCallback : (ws : any, message : string) => any) : void{
@@ -1009,6 +1018,10 @@ class Game{
 
         if(!this.isUserTurn(user)){
             errorCallback(user.connnection, "Not your turn");
+            return;
+        }
+        if(this.currentTrade == undefined || this.tradeUser == undefined){
+            errorCallback(user.connnection, "No trades available");
             return;
         }
         if(!this.tradeUser.some(a => a == 1)){
