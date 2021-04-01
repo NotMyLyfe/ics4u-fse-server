@@ -115,6 +115,42 @@ class Game{
     getUsers() : Array<gamePlayer> {
         return this.users;
     }
+    clearUserData() : void {
+        this.users.forEach(user => {
+            user.resources.fill(0);
+            user.victoryPoints = 0;
+            user.harbour.fill(false);
+            user.nodes.clear();
+            user.cards.fill(0);
+            user.pieces = [15, 5, 4];
+        });
+    }
+    removeUser(user : Client) : void {
+        for(let i = this.users.length - 1; i >= 0; i--){
+            if(this.users[i].client == user){
+                this.users.splice(i, 1);
+                break;
+            }
+        }
+        this.broadcastToUsers({
+            "message" : `${user.name} has left the game`
+        });
+    }
+    gameClosed() : void {
+        this.broadcastToUsers({
+            "message" : "Owner left game, shutting down"
+        });
+        this.users.forEach(user => {
+            user.client.joinedGame = undefined;
+        });
+    };
+    endPreamturely() : void {
+        this.broadcastToUsers({
+            "game" : "endPremature"
+        });
+        this.init();
+        this.clearUserData();
+    }
     winner(user : number) : boolean{
         if(this.users[user].victoryPoints >= 10){
             this.broadcastToUsers({
@@ -122,6 +158,7 @@ class Game{
                 "winner" : user
             });
             this.init();
+            this.clearUserData();
             return true;
         }
         return false;
@@ -1240,6 +1277,17 @@ export default class Games{
                 break;
             }
         }
-
+    }
+    removeUser(user : Client){
+        if(user.joinedGame == undefined) return;
+        let game = this.games.get(user.joinedGame);
+        game.removeUser(user);
+        if(game.isGameOwner(user.guid)){
+            game.gameClosed();
+            this.games.delete(user.joinedGame);
+        }
+        else if(game.isGameStarted()){
+            game.endPreamturely();
+        }
     }
 }

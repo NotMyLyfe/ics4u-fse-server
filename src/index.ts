@@ -105,7 +105,7 @@ wss.on('connection', (ws : any) => {
     });
     
     ws.on('close', ()=>{
-        // TODO Remove user and end user's game
+        games.removeUser(clients.getClient(ws.clientId));
         clients.removeClient(ws.clientId);
         console.log('connection closed');
     });
