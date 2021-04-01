@@ -62,7 +62,7 @@ wss.on('connection', (ws : any) => {
     ws.send(JSON.stringify({
         guid: clientId
     }));
-    clients.saveClient("No Name", clientId, ws);
+    clients.saveClient("Player", clientId, ws);
 
     ws.on('pong', heartbeat);
     

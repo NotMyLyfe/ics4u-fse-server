@@ -266,9 +266,9 @@ export class Board{
     getHexagon(row : number, column : number) : Hexagon{
         return this.hexagons[row][column];
     }
-    getLongestPath(node : Node, user: number, visitedSegments : Map<Node, Map<Node, boolean>> = new Map(), firstSearch : boolean = true) : number{
+    getLongestPath(node : Node, user: number, visitedSegments : Map<Node, Map<Node, boolean>>, firstSearch : boolean) : number{
         let length = 0;
-        if(!firstSearch && node.getUser() != -1 && node.getUser() != user) return length;
+        if(!firstSearch && node.getUser() != -1 && node.getUser() != user) return 0;
         if(!visitedSegments.has(node)) visitedSegments.set(node, new Map());
         for(let [adjNode, road] of node.getAdjacentNodes()){
             if(road != user || visitedSegments.get(node).get(adjNode)) continue;
@@ -278,7 +278,7 @@ export class Board{
             visitedSegments.get(adjNode).set(node, true);
             
             let tempLength = this.getLongestPath(adjNode, user, visitedSegments, false) + 1;
-            length = (tempLength > length) ? tempLength : length;
+            length = Math.max(length, tempLength);
 
             visitedSegments.get(node).set(adjNode, false);
             visitedSegments.get(adjNode).set(node, false);
@@ -293,6 +293,9 @@ export class Board{
         this.robberPosition = [...position];
         hexagon.setRobber();
         return true;
+    }
+    getRobberPosition() : Array<number>{
+        return this.robberPosition;
     }
     collisionRoad(position : Array<Array<number>>) : boolean{
         let hexagons = [this.getHexagon(position[0][0], position[0][1]), this.getHexagon(position[1][0], position[1][1])];

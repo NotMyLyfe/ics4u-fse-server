@@ -249,7 +249,7 @@ class Game{
         this.numOfResources[robbedPlayer]--;
         this.users[this.currentTurn].resources[resource]++;
         this.numOfResources[this.currentTurn]++;
-        this.broadcastGameInfo({"game" : "robbery"});
+        this.broadcastGameInfo({"game" : "robbery", "robber" : this.board.getRobberPosition()});
         this.validRobberies = new Set();
     }
 
@@ -267,15 +267,10 @@ class Game{
             this.validRobberies = new Set();
 
             this.board.getHexagon(position[0], position[1]).getAllNodes().forEach(node => {
-                console.log(node.getUser());
-                console.log(this.numOfResources[node.getUser()]);
                 if(node.getUser() != -1 && node.getUser() != this.currentTurn && this.numOfResources[node.getUser()] > 0) this.validRobberies.add(node.getUser());
             });
             
             this.moveRobber = false;
-            
-            // Debug response
-            console.log(this.validRobberies);
 
             if(this.validRobberies.size == 0) {
                 this.broadcastGameInfo({"game" : "robbery", "robber" : position});
@@ -343,7 +338,7 @@ class Game{
                     }
                 }
                 for(let j = 0; j < 5; j++) this.users[i].resources[j] -= resources[j];
-                this.numOfResources[this.currentTurn] -= this.numForfeit[i];
+                this.numOfResources[i] -= this.numForfeit[i];
                 this.numForfeit[i] = 0;
                 this.broadcastGameInfo();
                 break;
@@ -373,9 +368,6 @@ class Game{
                     numberOfUsers++;
                 }
             }
-            console.log(user);
-            console.log(numberOfUsers);
-            console.log(longest);
         }
         if(numberOfUsers == 1){
             if(this.currentLongestRoad != -1){
@@ -398,7 +390,9 @@ class Game{
     findLongestPathUser(user : number) : void{
         let longest = 0;
         this.users[user].nodes.forEach(node => {
-            let longestStartingFromNode = this.board.getLongestPath(node, user);
+            let longestStartingFromNode = this.board.getLongestPath(node, user, new Map(), true);
+            console.log(longestStartingFromNode);
+            console.log(node);
             if(longestStartingFromNode > longest) longest = longestStartingFromNode;
         });
         this.longestRoads[user] = longest;
@@ -481,15 +475,17 @@ class Game{
 
         let otherUser = this.board.breaksRoad(this.currentTurn, position);
         
+        let harbour = this.board.addSettlement(position, this.currentTurn);
+        
+        if(harbour != -1){
+            this.users[this.currentTurn].harbour[harbour] = true;
+        }
+
         if(otherUser != -1){
             this.findLongestPathUser(otherUser);
         }
 
-        let harbour = this.board.addSettlement(position, this.currentTurn);
 
-        if(harbour != -1){
-            this.users[this.currentTurn].harbour[harbour] = true;
-        }
 
         this.users[this.currentTurn].victoryPoints++;
         this.publicVictoryPoints[this.currentTurn]++;
@@ -639,6 +635,8 @@ class Game{
 
         this.users[this.currentTurn].pieces[0]--;
         this.users[this.currentTurn].pieces[1]--;
+
+        this.findLongestPathUser(this.currentTurn);
 
         this.broadcastGameInfo({
             "game" : "early game placement",
@@ -886,6 +884,9 @@ class Game{
 
         this.cantPlayCard = undefined;
         this.cardPlayed = true;
+
+        this.users[this.currentTurn].cards[cardNumber]--;
+        this.numOfCardsUsers[this.currentTurn]--;
 
         this.broadcastGameInfo({
             "game" : "card played",
