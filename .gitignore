@@ -105,3 +105,6 @@ dist
 
 # Compiled JavaScript
 *.js
+
+# VS Code
+.vscode/
